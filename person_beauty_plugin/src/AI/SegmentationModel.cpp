@@ -1,4 +1,6 @@
 #include "SegmentationModel.h"
+#include <algorithm>
+#include <cstring>
 #include <opencv2/imgproc.hpp>
 #include <vector>
 
@@ -13,7 +15,7 @@ bool SegmentationModel::load(const std::string &modelPath) {
 
 std::shared_ptr<ImageBuffer>
 SegmentationModel::process(const ImageBuffer &input) {
-  if (!engine_.getSession().GetInputCount()) {
+  if (!engine_.isLoaded()) {
     return nullptr;
   }
 
@@ -28,24 +30,21 @@ SegmentationModel::process(const ImageBuffer &input) {
 
   // Prepare input tensor
   // ONNX Runtime expects NCHW float array
-  std::vector<float> inputTensorValues;
-  inputTensorValues.reserve(1 * 3 * inputHeight_ * inputWidth_);
+  const int area = inputHeight_ * inputWidth_;
+  std::vector<float> inputTensorValues(3 * area);
 
   // HWC to CHW
   std::vector<cv::Mat> channels(3);
   cv::split(resized, channels);
-  for (const auto &ch : channels) {
-    inputTensorValues.insert(inputTensorValues.end(), ch.begin<float>(),
-                             ch.end<float>());
+  for (int c = 0; c < 3; ++c) {
+    std::memcpy(inputTensorValues.data() + c * area, channels[c].ptr<float>(),
+                area * sizeof(float));
   }
 
   std::vector<int64_t> inputShape = {1, 3, inputHeight_, inputWidth_};
-  Ort::MemoryInfo memoryInfo =
-      Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-
   Ort::Value inputTensor = Ort::Value::CreateTensor<float>(
-      memoryInfo, inputTensorValues.data(), inputTensorValues.size(),
-      inputShape.data(), inputShape.size());
+      engine_.getMemoryInfo(), inputTensorValues.data(),
+      inputTensorValues.size(), inputShape.data(), inputShape.size());
 
   // 2. Run Inference
   // Assuming 1 input and 1 output for now.
@@ -63,24 +62,53 @@ SegmentationModel::process(const ImageBuffer &input) {
     return nullptr;
 
   // 3. Postprocess
-  // Assuming output is NCHW or NHW (mask)
-  // For portrait segmentation, usually it produces a mask [1, 1, H, W] or [1,
-  // H, W]
+  const auto &tensor = outputTensors[0];
+  auto typeInfo = tensor.GetTensorTypeAndShapeInfo();
+  auto shape = typeInfo.GetShape();
+  if (shape.size() < 3) {
+    return nullptr;
+  }
 
-  float *floatOutput = outputTensors[0].GetTensorMutableData<float>();
-  // Create Mat from output (assuming 256x256 output)
-  cv::Mat maskFloat(inputHeight_, inputWidth_, CV_32FC1, floatOutput);
+  const int64_t n = shape[0];
+  const int64_t c = shape.size() == 4 ? shape[1] : 1;
+  const int64_t h = shape.size() == 4 ? shape[2] : shape[1];
+  const int64_t w = shape.size() == 4 ? shape[3] : shape[2];
+  if (n != 1 || h <= 0 || w <= 0) {
+    return nullptr;
+  }
 
-  // Resize back to original
-  cv::Mat mask;
-  cv::threshold(maskFloat, mask, 0.5, 255, cv::THRESH_BINARY);
-  mask.convertTo(mask, CV_8UC1);
+  const size_t outArea = static_cast<size_t>(h * w);
+  const float *floatOutput = tensor.GetTensorData<float>();
+  std::vector<uint8_t> maskData(outArea, 0);
 
+  if (c > 1) {
+    // 多通道语义分割，取 argmax 后认为非背景(>0)即前景
+    for (size_t idx = 0; idx < outArea; ++idx) {
+      int bestClass = 0;
+      float bestVal = floatOutput[idx];
+      for (int cls = 1; cls < c; ++cls) {
+        float val = floatOutput[cls * outArea + idx];
+        if (val > bestVal) {
+          bestVal = val;
+          bestClass = cls;
+        }
+      }
+      maskData[idx] = bestClass > 0 ? 255 : 0;
+    }
+  } else {
+    // 单通道概率，0.5 阈值
+    for (size_t idx = 0; idx < outArea; ++idx) {
+      maskData[idx] = floatOutput[idx] >= 0.5f ? 255 : 0;
+    }
+  }
+
+  cv::Mat coarseMask(h, w, CV_8UC1, maskData.data());
   cv::Mat finalMask;
-  cv::resize(mask, finalMask, input.getMat().size());
+  cv::resize(coarseMask, finalMask, input.getMat().size(), 0, 0,
+             cv::INTER_NEAREST);
 
-  auto result = std::make_shared<ImageBuffer>(input.getMat().cols,
-                                              input.getMat().rows, 1);
+  auto result =
+      std::make_shared<ImageBuffer>(input.getMat().cols, input.getMat().rows, 1);
   finalMask.copyTo(result->getMat());
 
   return result;

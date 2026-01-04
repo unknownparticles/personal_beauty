@@ -3,6 +3,8 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 #include "AI/FaceDetector.h"
 #include "AI/FaceLandmarkModel.h"
@@ -80,25 +82,26 @@ int main() {
   if (parsingModel.load(modelDir + "face_parsing.onnx")) {
     std::cout << "      [语义分割] 正在生成人脸区域蒙版..." << std::endl;
     auto parsingResult = parsingModel.process(mainImage);
-    const cv::Mat &segMap = parsingResult->getMat();
-    cv::Mat &maskMat = skinMask.getMat();
-
-    if (segMap.size() != maskMat.size()) {
-      cv::resize(segMap, segMap, maskMat.size(), 0, 0, cv::INTER_NEAREST);
+    if (!parsingResult) {
+      std::cerr << "      [警告] 语义分割结果为空，跳过皮肤蒙版生成。" << std::endl;
     }
-
-    for (int y = 0; y < height; ++y) {
-      const uint8_t *segRow = segMap.ptr<uint8_t>(y);
-      uint8_t *maskRow = maskMat.ptr<uint8_t>(y);
-      for (int x = 0; x < width; ++x) {
-        uint8_t label = segRow[x];
-        if (label == 1 || label == 10 || label == 14) {
-          maskRow[x] = 255;
-        }
+    if (parsingResult) {
+      const cv::Mat &segMap = parsingResult->getMat();
+      cv::Mat segResized;
+      if (segMap.size() == skinMask.getMat().size()) {
+        segResized = segMap;
+      } else {
+        cv::resize(segMap, segResized, skinMask.getMat().size(), 0, 0,
+                   cv::INTER_NEAREST);
       }
+
+      // 使用向量化操作提取皮肤区域 (label: 1/10/14)，避免手写双重循环
+      cv::Mat skinMaskBinary =
+          (segResized == 1) | (segResized == 10) | (segResized == 14);
+      skinMaskBinary.convertTo(skinMask.getMat(), CV_8U, 255.0);
+      std::cout << "      已生成皮肤蒙版。" << std::endl;
+      cv::imwrite("../../test_mask_debug.png", skinMask.getMat());
     }
-    std::cout << "      已生成皮肤蒙版。" << std::endl;
-    cv::imwrite("../../test_mask_debug.png", skinMask.getMat());
   }
 
   // 3. 蒙版处理

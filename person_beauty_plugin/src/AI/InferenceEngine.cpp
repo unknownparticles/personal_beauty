@@ -16,6 +16,8 @@ InferenceEngine::~InferenceEngine() {
 }
 
 bool InferenceEngine::loadModel(const std::string &modelPath) {
+  session_.reset();
+
   if (!std::filesystem::exists(modelPath)) {
     std::cerr << "[Warning] Model file not found: " << modelPath << std::endl;
     // Don't fail here if we want to allow the test to continue with mock data?
@@ -36,6 +38,7 @@ bool InferenceEngine::loadModel(const std::string &modelPath) {
     return true;
   } catch (const Ort::Exception &e) {
     std::cerr << "ONNX Runtime Error: " << e.what() << std::endl;
+    session_.reset();
     return false;
   }
 }
