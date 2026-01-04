@@ -1,6 +1,7 @@
 #include "FaceDetector.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
@@ -44,7 +45,7 @@ void FaceDetector::generateAnchors() {
 }
 
 std::vector<FaceBox> FaceDetector::detect(const ImageBuffer &input) {
-  if (!engine_.getSession().GetInputCount())
+  if (!engine_.isLoaded())
     return {};
 
   // 1. Preprocess
@@ -82,11 +83,10 @@ std::vector<FaceBox> FaceDetector::detect(const ImageBuffer &input) {
   // Since we don't know for sure, let's verify names if possible, but
   // hardcoding "input" is standard for UltraFace.
 
-  Ort::MemoryInfo memoryInfo =
-      Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
   std::vector<Ort::Value> inputTensors;
   inputTensors.push_back(Ort::Value::CreateTensor<float>(
-      memoryInfo, inputData.data(), inputData.size(), inputDims.data(),
+      engine_.getMemoryInfo(), inputData.data(), inputData.size(),
+      inputDims.data(),
       inputDims.size()));
 
   std::vector<const char *> outputNames = {"scores", "boxes"};

@@ -1,5 +1,6 @@
 #include "FaceLandmarkModel.h"
 #include <iostream>
+#include <cstring>
 #include <opencv2/opencv.hpp>
 
 namespace PersonBeauty {
@@ -13,7 +14,7 @@ bool FaceLandmarkModel::load(const std::string &modelPath) {
 
 std::vector<Point2f> FaceLandmarkModel::getLandmarks(const ImageBuffer &input,
                                                      const FaceBox &face) {
-  if (!engine_.getSession().GetInputCount())
+  if (!engine_.isLoaded())
     return {};
 
   // 1. Crop face
@@ -72,11 +73,10 @@ std::vector<Point2f> FaceLandmarkModel::getLandmarks(const ImageBuffer &input,
   // Try generic access if possible? No, ORT needs names.
   // Most PFLD onnx exports use 'input'.
 
-  Ort::MemoryInfo memoryInfo =
-      Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
   std::vector<Ort::Value> inputTensors;
   inputTensors.push_back(Ort::Value::CreateTensor<float>(
-      memoryInfo, inputData.data(), inputData.size(), inputDims.data(),
+      engine_.getMemoryInfo(), inputData.data(), inputData.size(),
+      inputDims.data(),
       inputDims.size()));
 
   std::vector<const char *> outputNames = {"output"};

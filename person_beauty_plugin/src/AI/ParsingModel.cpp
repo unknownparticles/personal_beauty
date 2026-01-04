@@ -1,5 +1,6 @@
 #include "ParsingModel.h"
 #include <algorithm>
+#include <cstring>
 #include <opencv2/imgproc.hpp>
 
 namespace PersonBeauty {
@@ -12,7 +13,7 @@ bool ParsingModel::load(const std::string &modelPath) {
 }
 
 std::shared_ptr<ImageBuffer> ParsingModel::process(const ImageBuffer &input) {
-  if (!engine_.getSession().GetInputCount())
+  if (!engine_.isLoaded())
     return nullptr;
 
   // 1. Preprocess
@@ -26,23 +27,20 @@ std::shared_ptr<ImageBuffer> ParsingModel::process(const ImageBuffer &input) {
   cv::divide(resized, cv::Scalar(0.229, 0.224, 0.225), resized);
 
   // Prepare Tensor
-  std::vector<float> inputTensorValues;
-  inputTensorValues.reserve(1 * 3 * inputHeight_ * inputWidth_);
+  const int area = inputHeight_ * inputWidth_;
+  std::vector<float> inputTensorValues(3 * area);
 
   std::vector<cv::Mat> channels(3);
   cv::split(resized, channels);
-  for (const auto &ch : channels) {
-    inputTensorValues.insert(inputTensorValues.end(), ch.begin<float>(),
-                             ch.end<float>());
+  for (int c = 0; c < 3; ++c) {
+    std::memcpy(inputTensorValues.data() + c * area, channels[c].ptr<float>(),
+                area * sizeof(float));
   }
 
   std::vector<int64_t> inputShape = {1, 3, inputHeight_, inputWidth_};
-  Ort::MemoryInfo memoryInfo =
-      Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-
   Ort::Value inputTensor = Ort::Value::CreateTensor<float>(
-      memoryInfo, inputTensorValues.data(), inputTensorValues.size(),
-      inputShape.data(), inputShape.size());
+      engine_.getMemoryInfo(), inputTensorValues.data(),
+      inputTensorValues.size(), inputShape.data(), inputShape.size());
 
   // 2. Run Inference
   const char *inputNames[] = {"input"};

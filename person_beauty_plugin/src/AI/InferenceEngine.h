@@ -14,6 +14,7 @@ public:
   ~InferenceEngine();
 
   bool loadModel(const std::string &modelPath);
+  bool isLoaded() const { return session_ != nullptr; }
 
   // Generic run method
   // In a real app, you might want more typed inputs/outputs or use template
