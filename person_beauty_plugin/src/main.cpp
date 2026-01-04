@@ -1,10 +1,10 @@
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <opencv2/opencv.hpp>
 #include <string>
-#include <vector>
-#include <chrono>
 #include <thread>
+#include <vector>
 
 #include "AI/FaceDetector.h"
 #include "AI/FaceLandmarkModel.h"
@@ -83,7 +83,8 @@ int main() {
     std::cout << "      [语义分割] 正在生成人脸区域蒙版..." << std::endl;
     auto parsingResult = parsingModel.process(mainImage);
     if (!parsingResult) {
-      std::cerr << "      [警告] 语义分割结果为空，跳过皮肤蒙版生成。" << std::endl;
+      std::cerr << "      [警告] 语义分割结果为空，跳过皮肤蒙版生成。"
+                << std::endl;
     }
     if (parsingResult) {
       const cv::Mat &segMap = parsingResult->getMat();
@@ -98,7 +99,7 @@ int main() {
       // 使用向量化操作提取皮肤区域 (label: 1/10/14)，避免手写双重循环
       cv::Mat skinMaskBinary =
           (segResized == 1) | (segResized == 10) | (segResized == 14);
-      skinMaskBinary.convertTo(skinMask.getMat(), CV_8U, 255.0);
+      skinMaskBinary.convertTo(skinMask.getMat(), CV_8UC1, 255.0);
       std::cout << "      已生成皮肤蒙版。" << std::endl;
       cv::imwrite("../../test_mask_debug.png", skinMask.getMat());
     }
@@ -113,8 +114,18 @@ int main() {
   Processing::ColorEngine::adjust(mainImage, skinMask, 0.15f, 1.1f, 0.9f, 0.0f);
 
   // 5. 液化变形
-  std::cout << "[5/7] 执行液化变形（模拟）..." << std::endl;
+  std::cout << "[5/7] 执行液化变形 (自动瘦脸)..." << std::endl;
   Processing::LiquifyEngine liquify(width, height);
+  if (!faces.empty()) {
+    // 针对检测到的每一张人脸进行瘦脸
+    for (const auto &face : faces) {
+      auto pts = landmarkModel.getLandmarks(mainImage, face);
+      if (!pts.empty()) {
+        liquify.slimFace(pts, 0.45f); // 45% 瘦脸强度
+      }
+    }
+    std::cout << "      已应用自动瘦脸变形。" << std::endl;
+  }
   liquify.process(mainImage, mainImage);
 
   // 6. 保存结果

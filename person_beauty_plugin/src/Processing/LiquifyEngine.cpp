@@ -104,5 +104,51 @@ void LiquifyEngine::process(const ImageBuffer &input, ImageBuffer &output) {
   cv::remap(input.getMat(), output.getMat(), mapX_, mapY_, cv::INTER_LINEAR);
 }
 
+void LiquifyEngine::slimFace(const std::vector<cv::Point2f> &landmarks,
+                             float strength) {
+  if (landmarks.size() < 68)
+    return;
+
+  // Indices for jawline: 0-16.
+  // We want to push the lower jaw points (roughly 3-7 and 9-13) towards the
+  // center.
+  std::vector<int> leftJaw = {3, 4, 5, 6, 7};
+  std::vector<int> rightJaw = {9, 10, 11, 12, 13};
+
+  // Estimate vertical midline from nose (27-30) and chin (8)
+  float midX = 0;
+  for (int i : {27, 28, 29, 30, 8}) {
+    midX += landmarks[i].x;
+  }
+  midX /= 5.0f;
+
+  float faceWidth = std::abs(landmarks[16].x - landmarks[0].x);
+  float radius = faceWidth * 0.25f; // Influence radius around each landmark
+  float r2 = radius * radius;
+
+  auto applySlim = [&](int idx, float dirSign) {
+    cv::Point2f target = landmarks[idx];
+    // Move towards midX
+    float shiftX = (midX - target.x) * strength * 0.5f;
+    cv::Point2f offset(shiftX, 0);
+
+    for (auto &pt : mesh_) {
+      float dist2 = (pt.x - target.x) * (pt.x - target.x) +
+                    (pt.y - target.y) * (pt.y - target.y);
+      if (dist2 < r2) {
+        float factor = (1.0f - dist2 / r2);
+        pt += offset * factor;
+      }
+    }
+  };
+
+  for (int i : leftJaw)
+    applySlim(i, 1.0f);
+  for (int i : rightJaw)
+    applySlim(i, -1.0f);
+
+  mapsDirty_ = true;
+}
+
 } // namespace Processing
 } // namespace PersonBeauty

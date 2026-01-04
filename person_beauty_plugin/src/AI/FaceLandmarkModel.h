@@ -6,9 +6,7 @@
 namespace PersonBeauty {
 namespace AI {
 
-struct Point2f {
-  float x, y;
-};
+// landmark points are cv::Point2f
 
 class FaceLandmarkModel {
 public:
@@ -17,8 +15,8 @@ public:
 
   // Process input image and a face box to get landmarks
   // Returns 68 or 106 points depending on model
-  std::vector<Point2f> getLandmarks(const ImageBuffer &input,
-                                    const FaceBox &face);
+  std::vector<cv::Point2f> getLandmarks(const ImageBuffer &input,
+                                        const FaceBox &face);
 
 private:
   InferenceEngine engine_;

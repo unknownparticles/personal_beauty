@@ -86,8 +86,7 @@ std::vector<FaceBox> FaceDetector::detect(const ImageBuffer &input) {
   std::vector<Ort::Value> inputTensors;
   inputTensors.push_back(Ort::Value::CreateTensor<float>(
       engine_.getMemoryInfo(), inputData.data(), inputData.size(),
-      inputDims.data(),
-      inputDims.size()));
+      inputDims.data(), inputDims.size()));
 
   std::vector<const char *> outputNames = {"scores", "boxes"};
 
@@ -147,7 +146,7 @@ std::vector<FaceBox> FaceDetector::detect(const ImageBuffer &input) {
   }
 
   std::vector<FaceBox> finalFaces;
-  nonMaximumSuppression(faces, finalFaces, 0.5f);
+  nonMaximumSuppression(faces, finalFaces, 0.3f);
 
   return finalFaces;
 }

@@ -26,6 +26,11 @@ public:
             float strength);
   void expand(float x, float y, float radius, float strength); // Bloat/Pinch
 
+  // Auto Slim Face using landmarks
+  // jawPoints: indices of landmarks forming the jawline (e.g. 0-16)
+  // centerPos: face center to pull towards
+  void slimFace(const std::vector<cv::Point2f> &landmarks, float strength);
+
   // Apply the current mesh warp to an image
   // Returns warped image
   void process(const ImageBuffer &input, ImageBuffer &output);

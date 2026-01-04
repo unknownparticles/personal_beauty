@@ -68,7 +68,6 @@ std::shared_ptr<ImageBuffer> ParsingModel::process(const ImageBuffer &input) {
   cv::Mat parsingMap(inputHeight_, inputWidth_, CV_8UC1);
 
   // Efficient ArgMax (this is slow in CPU loop, but standard for C++ demo)
-  int area = inputHeight_ * inputWidth_;
   for (int i = 0; i < area; ++i) {
     int maxClass = 0;
     float maxVal = floatOutput[i]; // Class 0
@@ -80,7 +79,7 @@ std::shared_ptr<ImageBuffer> ParsingModel::process(const ImageBuffer &input) {
         maxClass = c;
       }
     }
-    parsingMap.data[i] = static_cast<uchar>(maxClass);
+    parsingMap.data[i] = static_cast<unsigned char>(maxClass);
   }
 
   // Resize back to original size (Nearest Neighbor to keep class IDs)
