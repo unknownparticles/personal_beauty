@@ -6,6 +6,8 @@ namespace PersonBeauty {
 
 class ImageBuffer {
 public:
+  ImageBuffer() {}
+  ImageBuffer(const cv::Mat &mat) : data(mat) {}
   ImageBuffer(int width, int height, int channels = 3) {
     int type = CV_8UC3;
     if (channels == 1)
