@@ -1,0 +1,10 @@
+build/
+.vscode/
+.DS_Store
+*.user
+*.swp
+*.o
+*.a
+*.dylib
+*.dSYM
+models/*.onnx
